@@ -24,8 +24,7 @@
 
 
 //#define FLUID_LEVEL    1
-#define EXTERNAL_POWER 1
-#define USE_IMU        1
+#define POWER_IMU      1
 //#define STARTER_BATTERY 1
 #define DEBUG_0        1 // high level debug
 //#define DEBUG_1        1 // low level debug
@@ -89,7 +88,9 @@
 
 #endif
 
-#if defined EXTERNAL_POWER
+#if defined POWER_IMU
+  #include <Arduino_LSM6DS3.h>
+  
   #define PIN_IGN         A1
   #define PIN_MAINS       A2
   #define VOLTAGE_MULT    0.015
@@ -97,11 +98,15 @@
   #define PIN_RELAY       A3
   
 
-  BLEService extPowerService(vanSensors[SENSOR_IDX_IGNITION].uuid_s);
+  BLEService powerImuService(vanSensors[SENSOR_IDX_IGNITION].uuid_s);
   BLEUnsignedShortCharacteristic ignitionChar(vanSensors[SENSOR_IDX_IGNITION].uuid_c, BLERead | BLENotify);
   BLEUnsignedShortCharacteristic mainsPowerChar(vanSensors[SENSOR_IDX_MAINS_POWER].uuid_c, BLERead | BLENotify);
   BLEUnsignedShortCharacteristic currentChar(vanSensors[SENSOR_IDX_CURRENT].uuid_c, BLERead | BLENotify);
-  BLEUnsignedShortCharacteristic currentChar(vanSensors[SENSOR_IDX_RELAY].uuid_c, BLERead | BLENotify);
+  BLEUnsignedShortCharacteristic relayChar(vanSensors[SENSOR_IDX_RELAY].uuid_c, BLERead | BLENotify);
+  BLEUnsignedShortCharacteristic pitchChar(vanSensors[SENSOR_IDX_PITCH].uuid_c, BLERead | BLENotify);
+  BLEUnsignedShortCharacteristic rollChar(vanSensors[SENSOR_IDX_ROLL].uuid_c, BLERead | BLENotify);
+  BLEDescriptor pitchLabelDescriptor("2901", "Pitch Angle (deg)");
+  BLEDescriptor rollLabelDescriptor("2901", "Roll Angle (deg)");  
   BLEDescriptor ignitionLabelDescriptor("2901", "Ignition Flag");
   BLEDescriptor mainsPowerLabelDescriptor("2901", "Mains Power Flag");
   BLEDescriptor currentLabelDescriptor("2901", "Current (A)");  
@@ -110,17 +115,7 @@
   float ampSeconds;
   long  lastCurr = millis();
   long  lastUpload = millis();
-#endif
-
-#if defined USE_IMU
-  #include <Arduino_LSM6DS3.h>
-  bool boolIMU;
-
-  BLEService imuService(vanSensors[SENSOR_IDX_PITCH].uuid_s);
-  BLEUnsignedShortCharacteristic pitchChar(vanSensors[SENSOR_IDX_PITCH].uuid_c, BLERead | BLENotify);
-  BLEUnsignedShortCharacteristic rollChar(vanSensors[SENSOR_IDX_ROLL].uuid_c, BLERead | BLENotify);
-  BLEDescriptor pitchLabelDescriptor("2901", "Pitch Angle (deg)");
-  BLEDescriptor rollLabelDescriptor("2901", "Roll Angle (deg)");  
+  bool  boolIMU;
 #endif
 
 long  previousMillis = 0;  // last time the battery level was checked, in ms
@@ -221,8 +216,8 @@ void setup() {
     Serial.println();
 
     BLE.setAdvertisedService(starterBatteryService);          // add the service UUID
-    extPowerService.addCharacteristic(starterBatteryChar);  // add the battery level characteristic
-    extPowerService.addCharacteristic(alternatorChar);  // add the battery level characteristic
+    powerImuService.addCharacteristic(starterBatteryChar);  // add the battery level characteristic
+    powerImuService.addCharacteristic(alternatorChar);  // add the battery level characteristic
     starterBatteryChar.addDescriptor(starterBatteryLabelDescriptor);
     alternatorChar.addDescriptor(alternatorLabelDescriptor);
  
@@ -235,22 +230,27 @@ void setup() {
     Serial.println(0x3ff * ((analogRead(PIN_SB) * VOLTAGE_MULT) > ALT_THRESHOLD));      
   #endif
 
-  #if defined EXTERNAL_POWER   
+  #if defined POWER_IMU   
     Serial.println("External/Vehicle Power Sensor");
     Serial.println("==============================");
     Serial.println();
 
-    BLE.setAdvertisedService(extPowerService);          // add the service UUID
-    extPowerService.addCharacteristic(ignitionChar);  // add the battery level characteristic
-    extPowerService.addCharacteristic(mainsPowerChar);  // add the battery level characteristic
-    extPowerService.addCharacteristic(currentChar);  // add the battery level characteristic
-    extPowerService.addCharacteristic(relayChar);  // add the battery level characteristic
+    BLE.setAdvertisedService(powerImuService);          // add the service UUID
+    powerImuService.addCharacteristic(ignitionChar);  // add the battery level characteristic
+    powerImuService.addCharacteristic(mainsPowerChar);  // add the battery level characteristic
+    powerImuService.addCharacteristic(currentChar);  // add the battery level characteristic
+    powerImuService.addCharacteristic(relayChar);  // add the battery level characteristic
+    powerImuService.addCharacteristic(pitchChar);  // add the battery level characteristic
+    powerImuService.addCharacteristic(rollChar);  // add the battery level characteristic
     ignitionChar.addDescriptor(ignitionLabelDescriptor);    
     mainsPowerChar.addDescriptor(mainsPowerLabelDescriptor);
     currentChar.addDescriptor(currentLabelDescriptor);
     relayChar.addDescriptor(relayLabelDescriptor);
+    pitchChar.addDescriptor(pitchLabelDescriptor);
+    rollChar.addDescriptor(rollLabelDescriptor);    
+
  
-    BLE.addService(extPowerService);                    // Add the battery service
+    BLE.addService(powerImuService);                    // Add the battery service
       
     Serial.print(" Ignition:         ");
     Serial.println(analogRead(PIN_IGN));      
@@ -265,25 +265,12 @@ void setup() {
     curr = curr  * (MAX_CURRENT - MIN_CURRENT) / 0x3fc + MIN_CURRENT;
     Serial.println(curr);
     Serial.println();
-  #endif
 
-  #if defined USE_IMU   
     Serial.println("Vehicle Tilt Sensor");
     Serial.println("===================");
     Serial.println();
 
     boolIMU = IMU.begin();
-
-    if(boolIMU){
-      BLE.setAdvertisedService(imuService);          // add the service UUID
-      imuService.addCharacteristic(pitchChar);  // add the battery level characteristic
-      imuService.addCharacteristic(rollChar);  // add the battery level characteristic
-      pitchChar.addDescriptor(pitchLabelDescriptor);
-      rollChar.addDescriptor(rollLabelDescriptor);    
-      BLE.addService(imuService);                    // Add the battery service
-    } else {
-      Serial.println("IMU failed to initialise");
-    }
 
     readIMU();
     
@@ -307,11 +294,8 @@ void loop() {
     checkManualCal();
   #endif
 
-  #if defined EXTERNAL_POWER
+  #if defined POWER_IMU
     readExternal();
-  #endif
-
-  #if defined USE_IMU
     readIMU();
   #endif
 
@@ -337,17 +321,14 @@ void loop() {
           checkBleCal();
         #endif
   
-        #if defined EXTERNAL_POWER
-          readExternal();
-          ampSeconds = 0;
-          lastUpload = millis();
-        #endif
-      
         #if defined STARTER_BATTERY
           readStarter();
         #endif
       
-        #if defined USE_IMU
+        #if defined POWER_IMU
+          readExternal();
+          ampSeconds = 0;
+          lastUpload = millis();
           readIMU();
         #endif     
       }
@@ -356,7 +337,6 @@ void loop() {
     digitalWrite(LED_BUILTIN, LOW);
     Serial.print("Disconnected from central: ");
     Serial.println(central.address());
-
   }
 }
 
@@ -472,7 +452,7 @@ void loop() {
   }
 #endif
 
-#if defined EXTERNAL_POWER
+#if defined POWER_IMU
   void readExternal(){
     int ign = analogRead(PIN_IGN);
     saveSensorVal(SENSOR_IDX_IGNITION, ign);
@@ -530,9 +510,7 @@ void loop() {
     
     #endif  
   }
-#endif
 
-#if defined USE_IMU
   void readIMU(){
     float x, y, z;
     const float pi = 4 * atan(1);

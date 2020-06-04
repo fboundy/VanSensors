@@ -390,6 +390,10 @@ void loop() {
   
               // discover peripheral attributes
             Serial.print("    Discovering attributes: ");
+            long startDisc = millis();
+            while (!peripheral.discoverAttributes() && ((millis() - startDisc) < 2000)){
+              
+            }
             if (peripheral.discoverAttributes()) {
               Serial.println("OK");
               for (int j = 0; j < SENSORS; j++){
