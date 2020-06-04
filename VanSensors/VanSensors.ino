@@ -28,7 +28,7 @@
  */
 
 
-#define VERSION             8.3
+#define VERSION             8.4
 
 #include "config.h"           // user info
 #include "vanSensors.h"       // common data structures with peripherals
