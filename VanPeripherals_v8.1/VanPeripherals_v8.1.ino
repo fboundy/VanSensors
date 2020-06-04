@@ -94,15 +94,22 @@
   #define PIN_MAINS       A2
   #define VOLTAGE_MULT    0.015
   #define PIN_CURRENT     A0
+  #define PIN_RELAY       A3
   
 
   BLEService extPowerService(vanSensors[SENSOR_IDX_IGNITION].uuid_s);
   BLEUnsignedShortCharacteristic ignitionChar(vanSensors[SENSOR_IDX_IGNITION].uuid_c, BLERead | BLENotify);
   BLEUnsignedShortCharacteristic mainsPowerChar(vanSensors[SENSOR_IDX_MAINS_POWER].uuid_c, BLERead | BLENotify);
   BLEUnsignedShortCharacteristic currentChar(vanSensors[SENSOR_IDX_CURRENT].uuid_c, BLERead | BLENotify);
+  BLEUnsignedShortCharacteristic currentChar(vanSensors[SENSOR_IDX_RELAY].uuid_c, BLERead | BLENotify);
   BLEDescriptor ignitionLabelDescriptor("2901", "Ignition Flag");
   BLEDescriptor mainsPowerLabelDescriptor("2901", "Mains Power Flag");
-  BLEDescriptor currentLabelDescriptor("2901", "Current (A)");
+  BLEDescriptor currentLabelDescriptor("2901", "Current (A)");  
+  BLEDescriptor relayLabelDescriptor("2901", "Charge Relay Flag");
+  
+  float ampSeconds;
+  long  lastCurr = millis();
+  long  lastUpload = millis();
 #endif
 
 #if defined USE_IMU
@@ -116,7 +123,7 @@
   BLEDescriptor rollLabelDescriptor("2901", "Roll Angle (deg)");  
 #endif
 
-long previousMillis = 0;  // last time the battery level was checked, in ms
+long  previousMillis = 0;  // last time the battery level was checked, in ms
 
   
 void setup() {
@@ -237,9 +244,11 @@ void setup() {
     extPowerService.addCharacteristic(ignitionChar);  // add the battery level characteristic
     extPowerService.addCharacteristic(mainsPowerChar);  // add the battery level characteristic
     extPowerService.addCharacteristic(currentChar);  // add the battery level characteristic
+    extPowerService.addCharacteristic(relayChar);  // add the battery level characteristic
     ignitionChar.addDescriptor(ignitionLabelDescriptor);    
     mainsPowerChar.addDescriptor(mainsPowerLabelDescriptor);
     currentChar.addDescriptor(currentLabelDescriptor);
+    relayChar.addDescriptor(relayLabelDescriptor);
  
     BLE.addService(extPowerService);                    // Add the battery service
       
@@ -247,6 +256,8 @@ void setup() {
     Serial.println(analogRead(PIN_IGN));      
     Serial.print(" Mains Power:      ");
     Serial.println(analogRead(PIN_MAINS));
+    Serial.print(" Charge Relay:     ");
+    Serial.println(analogRead(PIN_RELAY));
     Serial.print(" Current:          ");
     float curr = analogRead(PIN_CURRENT);
     Serial.print(curr);
@@ -328,6 +339,12 @@ void loop() {
   
         #if defined EXTERNAL_POWER
           readExternal();
+          ampSeconds = 0;
+          lastUpload = millis();
+        #endif
+      
+        #if defined STARTER_BATTERY
+          readStarter();
         #endif
       
         #if defined USE_IMU
@@ -339,6 +356,7 @@ void loop() {
     digitalWrite(LED_BUILTIN, LOW);
     Serial.print("Disconnected from central: ");
     Serial.println(central.address());
+
   }
 }
 
@@ -460,15 +478,22 @@ void loop() {
     saveSensorVal(SENSOR_IDX_IGNITION, ign);
     int mains = analogRead(PIN_MAINS);
     saveSensorVal(SENSOR_IDX_MAINS_POWER, mains);
+    int relay = analogRead(PIN_RELAY);
+    saveSensorVal(SENSOR_IDX_RELAY, relay);
 
     int intCurr = analogRead(PIN_CURRENT);
     float curr = intCurr  * (MAX_CURRENT - MIN_CURRENT) / 0x3fc + MIN_CURRENT; 
+    ampSeconds = ampSeconds + curr * (millis() - lastCurr) / 1000;
+    lastCurr = millis();
+    float avgCurr = ampSeconds * 1000 / (millis() - lastUpload);
 
-    saveSensorVal(SENSOR_IDX_CURRENT, curr);
+    
+    saveSensorVal(SENSOR_IDX_CURRENT, avgCurr);
 
     ignitionChar.writeValue(vanSensors[SENSOR_IDX_IGNITION].val);
     mainsPowerChar.writeValue(vanSensors[SENSOR_IDX_MAINS_POWER].val);
     currentChar.writeValue(vanSensors[SENSOR_IDX_CURRENT].val);
+    relayChar.writeValue(vanSensors[SENSOR_IDX_RELAY].val);
  
     #if defined(DEBUG_0)
       Serial.print(" Ignition:         ");
@@ -485,10 +510,19 @@ void loop() {
       Serial.print("   ");
       Serial.println(readSensorVal(SENSOR_IDX_MAINS_POWER));
 
-      Serial.print(" Current:          ");
+      Serial.print(" Charge Relay:     ");
+      Serial.print(relay);
+      Serial.print("   ");
+      Serial.print(vanSensors[SENSOR_IDX_RELAY].val);
+      Serial.print("   ");
+      Serial.println(readSensorVal(SENSOR_IDX_RELAY));
+
+      Serial.print(" Inst Current:      ");
       Serial.print(intCurr);
       Serial.print("   ");
-      Serial.print(curr);
+      Serial.println(curr);
+      Serial.print(" Avg Current:       ");
+      Serial.print(avgCurr);
       Serial.print("   ");
       Serial.print(vanSensors[SENSOR_IDX_CURRENT].val);
       Serial.print("   ");

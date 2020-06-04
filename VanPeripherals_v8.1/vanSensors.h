@@ -7,7 +7,7 @@
 
 #define SENSOR_IDX_FRESH_WATER   0
 #define SENSOR_IDX_STARTER_BATT  1
-#define SENSOR_IDX_IGNITION       2
+#define SENSOR_IDX_IGNITION      2
 #define SENSOR_IDX_ALTERNATOR    3
 #define SENSOR_IDX_MAINS_POWER   4
 #define SENSOR_IDX_LEISURE_BATT  5
@@ -20,8 +20,9 @@
 #define SENSOR_IDX_PITCH        12
 #define SENSOR_IDX_ROLL         13
 #define SENSOR_IDX_CURRENT      14
+#define SENSOR_IDX_RELAY        15
 
-#define SENSORS                 15
+#define SENSORS                 16
 
 #define MIN_TEMP          -25.0
 #define MAX_TEMP           45.0
@@ -31,9 +32,8 @@
 #define MAX_VOLT           15.0
 #define MIN_HUM             1.0
 #define MAX_HUM           100.0
-#define MIN_CURRENT       -150.0
-#define MAX_CURRENT        150.0
-
+#define MIN_CURRENT       -187.97  // 13.3 mV/A  => 2.5V for 2500/13.3 = 187.97 A
+#define MAX_CURRENT        187.97  // resolution is 187.97 / 512 = 0.37 A
 
 struct vanSensorSet{
   char                *feedname;
@@ -65,6 +65,7 @@ vanSensorSet vanSensors[] = {
                              {"pitch",            0, false, SENS_TYPE_BLE,   "4D00", "4D05", -20, 20},
                              {"roll",             0, false, SENS_TYPE_BLE,   "4D00", "4D06", -20, 20},
                              {"current",          0, false, SENS_TYPE_BLE,   "4D00", "4D07", MIN_CURRENT, MAX_CURRENT},
+                             {"charge-relay",     0, false, SENS_TYPE_BLE,   "4D00", "4D01", 0, 0x3ff},
                             };
                             
 void saveSensorVal(int i, float x){
