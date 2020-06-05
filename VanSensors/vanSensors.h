@@ -21,8 +21,9 @@
 #define SENSOR_IDX_ROLL         13
 #define SENSOR_IDX_CURRENT      14
 #define SENSOR_IDX_RELAY        15
+#define SENSOR_IDX_LB_SOC       16
 
-#define SENSORS                 16
+#define SENSORS                 17
 
 #define MIN_TEMP          -25.0
 #define MAX_TEMP           45.0
@@ -66,6 +67,7 @@ vanSensorSet vanSensors[] = {
                              {"roll",             0, false, SENS_TYPE_BLE,   "4D00", "4D06", -20, 20},
                              {"current",          0, false, SENS_TYPE_BLE,   "4D00", "4D07", MIN_CURRENT, MAX_CURRENT},
                              {"charge-relay",     0, false, SENS_TYPE_BLE,   "4D00", "4D01", 0, 0x3ff},
+                             {"lb-soc",           0, false, SENS_TYPE_ADC,   "", "", 0, 100},
                             };
                             
 void saveSensorVal(int i, float x){

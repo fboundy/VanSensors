@@ -73,6 +73,10 @@
 #define PIN_LB              A0  
 #define ADC_COUNT           500           // take 500 voltage readings to get a decent average
 
+// Battery Auto-Cal settings comment these two lines out to turn off auto-cal
+#define BATTERY_CAPACITY    260           
+#define BMS_CUTOFF          14.4
+
 //Bluetooth LE Services for setting up WiFi and/or calibrating voltage
 BLEService vanCentralService("4A00");
 BLEUnsignedIntCharacteristic adcCalChar("4A01", BLERead | BLEWrite);
@@ -138,9 +142,15 @@ float lbvMult = 1.0;
 float sbvMult = 1.0;
 bool  runCal = false;
 
+bool  lastRelay;
+
+#if defined(BATTERY_CAPACITY)
+  float ampHours = BATTERY_CAPACITY;
+  long lastAmpHourCalc = millis();
+#endif
+
 long bleNotFoundTime[SERVICES];
 
-int blueCount = 0;
 
 
 // callback routine for MQTT (not used)
@@ -451,7 +461,68 @@ void loop() {
 
   minDiv();
   WiFi_connect();
-    
+
+// Auto-Cal logic
+  #if defined (BMS_CUTOFF)
+    bool  currentRelay = (readSensorVal(SENSOR_IDX_RELAY) > 0x01ff);
+    if (!currentRelay && lastRelay){
+      minDiv();
+      Serial.println("\nCharge Relay cutoff detected:");
+      Serial.println(  "-----------------------------");
+      Serial.print("  BMS Cutoff Voltage   : ");
+      Serial.print(BMS_CUTOFF);
+      Serial.println("V");
+      Serial.print("  Last Measured Voltage: ");
+      Serial.print(readSensorVal(SENSOR_IDX_LEISURE_BATT));
+      Serial.println("V");
+      if (readSensorVal(SENSOR_IDX_LEISURE_BATT) != -999.99){
+        lbvMult = lbvMult * BMS_CUTOFF / readSensorVal(SENSOR_IDX_LEISURE_BATT);
+        Serial.print("  New Voltage Mult     : ");
+        Serial.println(lbvMult);
+      }
+      
+      ampHours = BATTERY_CAPACITY;  
+
+      char buf[10];
+      dtostrf(lbvMult,10,8,buf);
+      for (int i = 0; i < 10; i++){
+        EEPROM.write(addrLbCal + i, buf[i]);
+      }
+      EEPROM.write(addrLbCal + 10,0);
+      Serial.print("  Committing changes to Flash Memory:");
+      EEPROM.commit();
+      if (EEPROM.isValid()){
+        Serial.println("OK");            
+      } else {
+        Serial.println("Fail");            
+      }
+    }  
+    lastRelay = currentRelay;
+
+    if (readSensorVal(SENSOR_IDX_CURRENT) > -999){
+      minDiv();
+      Serial.println("\nBattery Capacity Calcs:");
+      Serial.println("-----------------------");
+      Serial.print("  Old Capacity     :");
+      Serial.print(ampHours);
+      Serial.println(" Ah");
+      Serial.print("  Current     :");
+      Serial.print(readSensorVal(SENSOR_IDX_CURRENT));
+      Serial.print(" A x ");
+      Serial.print((millis() - lastAmpHourCalc) / 1000);
+      Serial.print(" seconds = ");
+      long millisNow = millis();
+      Serial.print(readSensorVal(SENSOR_IDX_CURRENT) * (millisNow - lastAmpHourCalc) / 3600000);
+      Serial.println(" Ah");
+      ampHours = ampHours + readSensorVal(SENSOR_IDX_CURRENT) * (millisNow - lastAmpHourCalc) / 3600000;
+      Serial.print("  New Capacity     :");
+      Serial.print(ampHours);
+      Serial.println(" Ah");
+      saveSensorVal(SENSOR_IDX_LB_SOC, ampHours / BATTERY_CAPACITY);
+      lastAmpHourCalc = millisNow;
+    }
+  #endif
+  
   if(MQTT_connect()){
     minDiv();
     Serial.println("Sending MQTT Data:");
@@ -466,7 +537,7 @@ void loop() {
     }
   }
     
-  oled.setCursor(0, OLED_BAR);
+/*  oled.setCursor(0, OLED_BAR);
   oled.print("OOOOOOOOO");
   for (int lcol = 9; lcol >= 0; lcol--){    
     for (int i = 0; i<IO_CYCLE/10000; i++){
@@ -477,7 +548,7 @@ void loop() {
       oled.setCursor(lcol, OLED_BAR);
       oled.print(" ");
     }
-  }
+  } */
 }
 
 bool sendMqtt(const char* f, float v){
@@ -1110,6 +1181,4 @@ void calibrateVoltage(){
 void calCheck(){
   if (!runCal){Serial.println("****** Cal Button Pressed ******");}
   runCal = true;
-  blueCount++;
-  Serial.println(blueCount);
 }
