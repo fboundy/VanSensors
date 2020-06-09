@@ -24,20 +24,22 @@
 
 
 //#define FLUID_LEVEL    1
-#define POWER_IMU      1
-//#define STARTER_BATTERY 1
+//#define POWER_IMU      1
+#define STARTER_BATTERY 1
 #define DEBUG_0        1 // high level debug
 //#define DEBUG_1        1 // low level debug
 
 
 #include <ArduinoBLE.h>
-#include <EEPROM.h>
+
 #include "vanSensors.h"
 
 #define UPDATE_PERIOD 500
 
 // Fluid Level Sensor 
-#if defined FLUID_LEVEL
+#if (defined (FLUID_LEVEL) && defined (ARDUINO_AVR_UNO_WIFI_REV2))
+  #include <EEPROM.h>
+
   #define echoPin         2    // attach pin D2 Arduino to pin Echo of HC-SR04
   #define trigPin         3    //attach pin D3 Arduino to pin Trig of HC-SR04
   #define emptyPin        4
@@ -75,12 +77,12 @@
   long lastEmpty;
 #endif
 
-#if defined STARTER_BATTERY
-  #define PIN_SB          A0
+#if (defined (STARTER_BATTERY) && defined (ARDUINO_NANO33BLE))
+  #define PIN_SB          A6
   #define ALT_THRESHOLD   14.0
   #define VOLTAGE_MULT    0.0175
 
-  BLEService starterBattService(vanSensors[SENSOR_IDX_STARTER_BATT].uuid_s);
+  BLEService starterBatteryService(vanSensors[SENSOR_IDX_STARTER_BATT].uuid_s);
   BLEUnsignedShortCharacteristic starterBatteryChar(vanSensors[SENSOR_IDX_STARTER_BATT].uuid_c, BLERead | BLENotify);
   BLEUnsignedShortCharacteristic alternatorChar(vanSensors[SENSOR_IDX_ALTERNATOR].uuid_c, BLERead | BLENotify);
   BLEDescriptor starterBatteryLabelDescriptor("2901", "Starter Battery Voltage (V)");
@@ -88,23 +90,26 @@
 
 #endif
 
-#if defined POWER_IMU
+#if (defined (POWER_IMU) && defined (ARDUINO_AVR_UNO_WIFI_REV2))
   #include <Arduino_LSM6DS3.h>
   
   #define PIN_IGN         A1
   #define PIN_MAINS       A2
   #define VOLTAGE_MULT    0.015
-  #define PIN_CURRENT     A0
+  #define PIN_CURRENT     A4
   #define PIN_RELAY       A3
+  #define PIN_LB          A0
   
 
-  BLEService powerImuService(vanSensors[SENSOR_IDX_IGNITION].uuid_s);
+  BLEService powerImuService(vanSensors[SENSOR_IDX_LEISURE_BATT].uuid_s);
+  BLEUnsignedShortCharacteristic leisureBattChar(vanSensors[SENSOR_IDX_LEISURE_BATT].uuid_c, BLERead | BLENotify);
   BLEUnsignedShortCharacteristic ignitionChar(vanSensors[SENSOR_IDX_IGNITION].uuid_c, BLERead | BLENotify);
   BLEUnsignedShortCharacteristic mainsPowerChar(vanSensors[SENSOR_IDX_MAINS_POWER].uuid_c, BLERead | BLENotify);
   BLEUnsignedShortCharacteristic currentChar(vanSensors[SENSOR_IDX_CURRENT].uuid_c, BLERead | BLENotify);
   BLEUnsignedShortCharacteristic relayChar(vanSensors[SENSOR_IDX_RELAY].uuid_c, BLERead | BLENotify);
   BLEUnsignedShortCharacteristic pitchChar(vanSensors[SENSOR_IDX_PITCH].uuid_c, BLERead | BLENotify);
   BLEUnsignedShortCharacteristic rollChar(vanSensors[SENSOR_IDX_ROLL].uuid_c, BLERead | BLENotify);
+  BLEDescriptor leisureBattLabelDescriptor("2901", "Leisure Battery Voltage (V)");
   BLEDescriptor pitchLabelDescriptor("2901", "Pitch Angle (deg)");
   BLEDescriptor rollLabelDescriptor("2901", "Roll Angle (deg)");  
   BLEDescriptor ignitionLabelDescriptor("2901", "Ignition Flag");
@@ -135,7 +140,7 @@ void setup() {
     Serial.println(BLE.address().c_str());
 
     Serial.print("Setting Device Name to ");
-    String strName = String("Van_Sensor_" + BLE.address().substring(0,5));
+    String strName = String("Van_" + BLE.address().substring(0,5));
     Serial.println(strName);
 
     BLE.setDeviceName(strName.c_str());
@@ -145,7 +150,7 @@ void setup() {
   
   pinMode(LED_BUILTIN, OUTPUT); // initialize the built-in LED pin to indicate when a central is connected
 
-  #if defined FLUID_LEVEL
+  #if (defined (FLUID_LEVEL) && defined (ARDUINO_AVR_UNO_WIFI_REV2))
     Serial.println("Fluid Level Sensor");
     Serial.println("=================");
     Serial.println();
@@ -210,14 +215,14 @@ void setup() {
 
   #endif
 
-  #if defined STARTER_BATTERY  
+  #if (defined (STARTER_BATTERY) && defined (ARDUINO_NANO33BLE)) 
     Serial.println("Starter Battery Sensor");
     Serial.println("======================");
     Serial.println();
 
     BLE.setAdvertisedService(starterBatteryService);          // add the service UUID
-    powerImuService.addCharacteristic(starterBatteryChar);  // add the battery level characteristic
-    powerImuService.addCharacteristic(alternatorChar);  // add the battery level characteristic
+    starterBatteryService.addCharacteristic(starterBatteryChar);  // add the battery level characteristic
+    starterBatteryService.addCharacteristic(alternatorChar);  // add the battery level characteristic
     starterBatteryChar.addDescriptor(starterBatteryLabelDescriptor);
     alternatorChar.addDescriptor(alternatorLabelDescriptor);
  
@@ -230,18 +235,20 @@ void setup() {
     Serial.println(0x3ff * ((analogRead(PIN_SB) * VOLTAGE_MULT) > ALT_THRESHOLD));      
   #endif
 
-  #if defined POWER_IMU   
+  #if (defined (POWER_IMU) && defined (ARDUINO_AVR_UNO_WIFI_REV2))  
     Serial.println("External/Vehicle Power Sensor");
     Serial.println("==============================");
     Serial.println();
 
     BLE.setAdvertisedService(powerImuService);          // add the service UUID
+    powerImuService.addCharacteristic(leisureBattChar);  // add the battery level characteristic
     powerImuService.addCharacteristic(ignitionChar);  // add the battery level characteristic
     powerImuService.addCharacteristic(mainsPowerChar);  // add the battery level characteristic
     powerImuService.addCharacteristic(currentChar);  // add the battery level characteristic
     powerImuService.addCharacteristic(relayChar);  // add the battery level characteristic
     powerImuService.addCharacteristic(pitchChar);  // add the battery level characteristic
     powerImuService.addCharacteristic(rollChar);  // add the battery level characteristic
+    leisureBattChar.addDescriptor(leisureBattLabelDescriptor);    
     ignitionChar.addDescriptor(ignitionLabelDescriptor);    
     mainsPowerChar.addDescriptor(mainsPowerLabelDescriptor);
     currentChar.addDescriptor(currentLabelDescriptor);
@@ -251,7 +258,11 @@ void setup() {
 
  
     BLE.addService(powerImuService);                    // Add the battery service
+
+    readExternal();
       
+    Serial.print(" LB Voltage:       ");
+    Serial.println(analogRead(PIN_LB) * VOLTAGE_MULT);      
     Serial.print(" Ignition:         ");
     Serial.println(analogRead(PIN_IGN));      
     Serial.print(" Mains Power:      ");
@@ -289,16 +300,19 @@ void loop() {
 
 // Read sensors etc. prior to advertising checking BLE
 
-  #if defined FLUID_LEVEL  
+  #if (defined (FLUID_LEVEL) && defined (ARDUINO_AVR_UNO_WIFI_REV2)) 
     readDistance();
     checkManualCal();
   #endif
 
-  #if defined POWER_IMU
+  #if (defined (POWER_IMU) && defined (ARDUINO_AVR_UNO_WIFI_REV2))
     readExternal();
     readIMU();
   #endif
 
+  #if (defined (STARTER_BATTERY) && defined (ARDUINO_NANO33BLE))
+    readStarter();
+  #endif
   
   BLEDevice central = BLE.central();
 
@@ -315,17 +329,17 @@ void loop() {
       long currentMillis = millis();
       if(currentMillis - previousMillis >= UPDATE_PERIOD) {
         previousMillis = currentMillis;
-        #if defined FLUID_LEVEL 
+        #if (defined (FLUID_LEVEL) && defined (ARDUINO_AVR_UNO_WIFI_REV2))
           readDistance();
           checkManualCal();
           checkBleCal();
         #endif
   
-        #if defined STARTER_BATTERY
+        #if (defined (STARTER_BATTERY) && defined (ARDUINO_NANO33BLE))
           readStarter();
         #endif
       
-        #if defined POWER_IMU
+        #if (defined (POWER_IMU) && defined (ARDUINO_AVR_UNO_WIFI_REV2))
           readExternal();
           ampSeconds = 0;
           lastUpload = millis();
@@ -340,7 +354,7 @@ void loop() {
   }
 }
 
-#if defined FLUID_LEVEL
+#if (defined (FLUID_LEVEL) && defined (ARDUINO_AVR_UNO_WIFI_REV2))
   void readDistance(){
     digitalWrite(trigPin, LOW);
     delayMicroseconds(2);
@@ -423,7 +437,7 @@ void loop() {
   }
 #endif
 
-#if defined STARTER_BATTERY
+#if (defined (STARTER_BATTERY) && defined (ARDUINO_NANO33BLE))
   void readStarter(){
     float sb = analogRead(PIN_SB) * VOLTAGE_MULT;
     saveSensorVal(SENSOR_IDX_STARTER_BATT, sb);
@@ -452,8 +466,10 @@ void loop() {
   }
 #endif
 
-#if defined POWER_IMU
+#if (defined (POWER_IMU) && defined (ARDUINO_AVR_UNO_WIFI_REV2))
   void readExternal(){
+    float lb = analogRead(PIN_LB) * VOLTAGE_MULT ;
+    saveSensorVal(SENSOR_IDX_LEISURE_BATT, lb);
     int ign = analogRead(PIN_IGN);
     saveSensorVal(SENSOR_IDX_IGNITION, ign);
     int mains = analogRead(PIN_MAINS);
@@ -476,6 +492,13 @@ void loop() {
     relayChar.writeValue(vanSensors[SENSOR_IDX_RELAY].val);
  
     #if defined(DEBUG_0)
+      Serial.print(" LB Voltage:       ");
+      Serial.print(lb);
+      Serial.print("   ");
+      Serial.print(vanSensors[SENSOR_IDX_LEISURE_BATT].val);
+      Serial.print("   ");
+      Serial.println(readSensorVal(SENSOR_IDX_LEISURE_BATT));
+      
       Serial.print(" Ignition:         ");
       Serial.print(ign);
       Serial.print("   ");

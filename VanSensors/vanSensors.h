@@ -1,3 +1,5 @@
+#define VERSION         8.4
+
 #include <Arduino.h>
 
 #define SENS_TYPE_ADC     0
@@ -56,7 +58,7 @@ vanSensorSet vanSensors[] = {
                              {"ignition",         0, false, SENS_TYPE_BLE,   "4D00", "4D02", 0, 0x3ff}, 
                              {"alternator",       0, false, SENS_TYPE_BLE,   "4D00", "4D03", 0, 0x3ff},  
                              {"mains-power",      0, false, SENS_TYPE_BLE,   "4D00", "4D04", 0, 0x3ff},
-                             {"leisure-battery",  0, false, SENS_TYPE_ADC,   "", "", MIN_VOLT, MAX_VOLT},
+                             {"leisure-battery",  0, false, SENS_TYPE_BLE,   "4D00", "4D08", MIN_VOLT, MAX_VOLT},
                              {"ext-temp",         0, false, SENS_TYPE_SHT,   "", "", MIN_TEMP, MAX_TEMP},
                              {"ext-hum",          0, false, SENS_TYPE_SHT,   "", "", MIN_HUM, MAX_HUM},
                              {"int-temp",         0, false, SENS_TYPE_BME,   "", "", MIN_TEMP, MAX_TEMP},
