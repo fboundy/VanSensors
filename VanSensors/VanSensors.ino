@@ -47,9 +47,9 @@
   #define pinFan                5
   
   #define CONNECTION_ATTEMPTS 3
-  #define BLE_SCAN_TIMEOUT      20000   // wait 10 seconds to find any given Service UUID
+  #define BLE_SCAN_TIMEOUT      10000   // wait 10 seconds to find any given Service UUID
   #define BLE_ATTR_TIMEOUT       5000   // wait  5 seconds to find BLE attributes
-  #define BLE_RESCAN_INT       600000   // wait 10 minutes to look for a peripheral if it isn't found
+  #define BLE_RESCAN_INT       120000   // wait  2 minutes to look for a peripheral if it isn't found
   #define BLE_SCAN_ATTEMPTS         3
   
   #include <avr/dtostrf.h>
@@ -390,15 +390,19 @@
         Serial.print(": ");
         Serial.print(uuidServ[i]);
         Serial.print(" {");
-        Serial.print(bleNotFoundTime[i]);
-        Serial.print("} ");
         unsigned long startLoop = millis();
-        if ((bleNotFoundTime[i] == 0) && ((bleNotFoundTime[i] - startLoop) > BLE_RESCAN_INT)){
+        Serial.print(startLoop - bleNotFoundTime[i]);
+        Serial.print("} ");
+        if ((bleNotFoundTime[i] == 0) || ((startLoop - bleNotFoundTime[i]) > BLE_RESCAN_INT)){
           Serial.print("  Scanning for UUID[");
           Serial.print(bleScanCount[i]);
           Serial.print("]: ");
           if (bleScanCount[i] == BLE_SCAN_ATTEMPTS){
             bleScanCount[i] = 0;
+          }
+          if (bleNotFoundTime[i] > 0){
+            bleNotFoundTime[i] = 0;    
+            mqttLogPrint("UUID " + String(uuidServ[i]) + " [" + String(bleScanCount[i]) + "]: Re-Scan");
           }
           oled.setCursor(0,OLED_BAR);
           oled.print("BLE ");
@@ -1267,18 +1271,16 @@
     for (int i = 0; i < mqttLog.length(); i++){
       if (c[i] == 10){
         e[i - j] = 0;
-        Serial.println();
+/*        Serial.println();
         Serial.print(k);
         Serial.print(": ");
-        Serial.println(e);
+        Serial.println(e); */
         mqttClient.publish(AIO_LOG, e);      
         delay(250);
         j = i + 1;
         k++;
       } else {
         e[i - j] = c[i];
-        Serial.print(c[i]);
-        Serial.print(" ");
       }
     } 
 
