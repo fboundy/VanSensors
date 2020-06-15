@@ -67,11 +67,6 @@
   #define BME_MOSI             8 // Green
   #define BME_CS               7 // Blue
   
-  //Leisure Battery ADC
-  #define VOLTDIVRATIO        0.017584      // defuault conversion from ADC reading to volts (depends on voltage divider used)
-  #define PIN_LB              A0  
-  #define ADC_COUNT           500           // take 500 voltage readings to get a decent average
-  
   // Battery Auto-Cal settings comment these two lines out to turn off auto-cal
   #define BATTERY_CAPACITY    260           
   #define BMS_CUTOFF          14.4
@@ -104,7 +99,7 @@
   #define OLED_BAR           15
   
   // Neo-6M GPS
-  #define NEO_6M_TIMEOUT    30000
+  #define NEO_6M_TIMEOUT    10000
   
   // Settings for manual voltage calibration
   #define pinCal                6
@@ -391,7 +386,7 @@
         Serial.print(uuidServ[i]);
         Serial.print(" {");
         unsigned long startLoop = millis();
-        Serial.print(startLoop - bleNotFoundTime[i]);
+        Serial.print((startLoop - bleNotFoundTime[i])/1000  );
         Serial.print("} ");
         if ((bleNotFoundTime[i] == 0) || ((startLoop - bleNotFoundTime[i]) > BLE_RESCAN_INT)){
           Serial.print("  Scanning for UUID[");
@@ -448,6 +443,14 @@
                         Serial.print(vanSensors[j].uuid_c);
                         Serial.print(". Value: ");
                         peripheral.characteristic(vanSensors[j].uuid_c).readValue(vanSensors[j].val);
+                        if (j == SENSOR_IDX_LEISURE_BATT){
+                          vanSensors[j].val = vanSensors[j].val * lbvMult; 
+                          oledXYprint(OLED_LB, OLED_RCOL, readSensorVal(j), 1);
+                        }                      
+                        if (j == SENSOR_IDX_STARTER_BATT){
+                          vanSensors[j].val = vanSensors[j].val * sbvMult; 
+                          oledXYprint(OLED_SB, OLED_RCOL, readSensorVal(j), 1);
+                        }                      
                         Serial.println(vanSensors[j].val);
                         vanSensors[j].updated=(vanSensors[j].val != 0);
                       }
@@ -931,8 +934,28 @@
       oled.print("LB Cal: ");
       oled.println(lbvM);
       oled.println();
+
+      l = 0;
+      Serial.print("Saved sbvMult:");
+      for (int i = 0; i < 10; i++){
+        sbvM[i] = (EEPROM.read(addrSbCal + i));
+        l = i;
+        if (sbvM[i] == 0){
+          break;
+        }
+      }
+      Serial.print(sbvM);
+      Serial.print(" = ");
+      sbvMult = atof(sbvM);
+      dtostrf(sbvMult,7,5,sbvM);
+      Serial.println(sbvMult);                
+      oled.print("SB Cal: ");
+      oled.println(sbvM);
+      oled.println();
+     
       mqttLogPrint("Flash SSID:" + String(ssid));
       mqttLogPrint("Flash LB Cal:" + String(lbvM));
+      mqttLogPrint("Flash SB Cal:" + String(sbvM));
 
     } else {
       Serial.println("No Saved Data in Flash Memory");
@@ -979,6 +1002,15 @@
       }
       Serial.println();        
       EEPROM.write(addrLbCal + 10, 0);
+  
+      l = 0;
+      Serial.print("  sbvMult:   ");
+      for (int i = 0; i < 10; i++){
+        Serial.print(sbvM[i]);
+        EEPROM.write(addrSbCal + i,sbvM[i]);
+      }
+      Serial.println();        
+      EEPROM.write(addrSbCal + 10, 0);
   
       Serial.print("  Saving to Flash: ");
       EEPROM.commit();
@@ -1059,6 +1091,9 @@
               Serial.println(buf);
               oled.println(buf);
               oled.println();
+
+              mqttLogPrint("New password from BLE: " + String(ssid));
+
               for (int i = 0; i< l; i++){
                 EEPROM.write(addrSsid + i, buf[i]);
                 ssid[i] = buf[i];
@@ -1079,6 +1114,9 @@
               Serial.println(buf);
               oled.println(buf);
               oled.println();
+              
+              mqttLogPrint("New password from BLE");
+
               for (int i = 0; i< l; i++){
                 EEPROM.write(addrPwd + i, buf[i]);
                 pwd[i] = buf[i];
@@ -1125,6 +1163,8 @@
     Serial.println(lbvF);
     Serial.print("SB: ");
     Serial.println(sbvC);
+    Serial.print(" = ");
+    Serial.println(sbvF);
     
     BLEService voltCalService("4B00");
     BLECharacteristic lbVoltChar("4B01", BLERead | BLEWrite, lbvC); 
@@ -1203,16 +1243,59 @@
                 lbvMult = lbvMult * v1 / lbvF;
                 Serial.print("New lbVmult:     ");
                 Serial.println(lbvMult);
-                if (!burnFlash){oled.clear();};
+                
+                if (!burnFlash){oled.clear();};                
                 oled.println("LB Volt Cal:");
-  
                 char buf2[10];
                 dtostrf(lbvMult,10,8,buf2);
                 oled.println(buf2);
+
+                mqttLogPrint("Manual lbvMult: " + String(buf2));
+                
                 for (int i = 0; i < 10; i++){
                   EEPROM.write(addrLbCal + i, buf2[i]);
                 }
                 EEPROM.write(addrLbCal + 10,0);
+                burnFlash = true;
+              }
+            }
+
+            if (sbVoltChar.written()){
+              Serial.print("SB Voltage Cal:    ");
+       
+              int l = sbVoltChar.valueLength();
+              char buf[l];
+              sbVoltChar.readValue(buf, l);
+              Serial.print(buf);
+              Serial.println("V");
+    
+              Serial.print("Float Voltage: ");
+              float v1 = atof(buf);
+              Serial.print(v1);
+              
+              if((v1 >= vanSensors[SENSOR_IDX_STARTER_BATT].valMin ) && (v1 <= vanSensors[SENSOR_IDX_STARTER_BATT].valMax )){
+                Serial.println(" - OK");
+                Serial.print("SB Voltage Read:   ");
+                Serial.print(sbvC);
+                Serial.println("V");
+                Serial.print("Old sbVmult:     ");
+                Serial.println(sbvMult);
+                sbvMult = sbvMult * v1 / sbvF;
+                Serial.print("New sbVmult:     ");
+                Serial.println(sbvMult);
+                if (!burnFlash){oled.clear();};
+                oled.println("SB Volt Cal:");
+  
+                char buf2[10];
+                dtostrf(sbvMult,10,8,buf2);
+                oled.println(buf2);
+
+                mqttLogPrint("Manual sbvMult: " + String(buf2));
+                
+                for (int i = 0; i < 10; i++){
+                  EEPROM.write(addrSbCal + i, buf2[i]);
+                }
+                EEPROM.write(addrSbCal + 10,0);
                 burnFlash = true;
               }
             }
@@ -1231,6 +1314,8 @@
           BLE.disconnect();
           BLE.end();
           Serial.println("Connecting to WiFi:\n");  
+          delay(500);
+          oledTemplate();
         }
       }
     }

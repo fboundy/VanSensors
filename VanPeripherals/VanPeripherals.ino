@@ -24,8 +24,8 @@
 
 
 //#define FLUID_LEVEL    1
-//#define POWER_IMU      1
-#define STARTER_BATTERY 1
+#define POWER_IMU      1
+//#define STARTER_BATTERY 1
 #define DEBUG_0        1 // high level debug
 //#define DEBUG_1        1 // low level debug
 
@@ -77,10 +77,10 @@
   long lastEmpty;
 #endif
 
-#if (defined (STARTER_BATTERY) && defined (ARDUINO_NANO33BLE))
+#if (defined (STARTER_BATTERY) && defined (ARDUINO_ARCH_NRF52840))
   #define PIN_SB          A6
   #define ALT_THRESHOLD   14.0
-  #define VOLTAGE_MULT    0.0175
+  #define VOLTAGE_MULT    0.0184
 
   BLEService starterBatteryService(vanSensors[SENSOR_IDX_STARTER_BATT].uuid_s);
   BLEUnsignedShortCharacteristic starterBatteryChar(vanSensors[SENSOR_IDX_STARTER_BATT].uuid_c, BLERead | BLENotify);
@@ -95,15 +95,15 @@
   
   #define PIN_IGN         A1
   #define PIN_MAINS       A2
-  #define VOLTAGE_MULT    0.015
+  #define VOLTAGE_MULT    0.0172
   #define PIN_CURRENT     A4
   #define PIN_RELAY       A3
   #define PIN_LB          A0
   
 
   BLEService powerImuService(vanSensors[SENSOR_IDX_LEISURE_BATT].uuid_s);
-  BLEUnsignedShortCharacteristic leisureBattChar(vanSensors[SENSOR_IDX_LEISURE_BATT].uuid_c, BLERead | BLENotify);
-  BLEUnsignedShortCharacteristic ignitionChar(vanSensors[SENSOR_IDX_IGNITION].uuid_c, BLERead | BLENotify);
+  BLEUnsignedShortCharacteristic leisureBattChar(vanSensors[SENSOR_IDX_LEISURE_BATT].uuid_c, BLERead | BLENotify);  //4d01
+  BLEUnsignedShortCharacteristic ignitionChar(vanSensors[SENSOR_IDX_IGNITION].uuid_c, BLERead | BLENotify);  //4d02
   BLEUnsignedShortCharacteristic mainsPowerChar(vanSensors[SENSOR_IDX_MAINS_POWER].uuid_c, BLERead | BLENotify);
   BLEUnsignedShortCharacteristic currentChar(vanSensors[SENSOR_IDX_CURRENT].uuid_c, BLERead | BLENotify);
   BLEUnsignedShortCharacteristic relayChar(vanSensors[SENSOR_IDX_RELAY].uuid_c, BLERead | BLENotify);
@@ -215,7 +215,7 @@ void setup() {
 
   #endif
 
-  #if (defined (STARTER_BATTERY) && defined (ARDUINO_NANO33BLE)) 
+  #if (defined (STARTER_BATTERY) && defined (ARDUINO_ARCH_NRF52840)) 
     Serial.println("Starter Battery Sensor");
     Serial.println("======================");
     Serial.println();
@@ -273,7 +273,7 @@ void setup() {
     float curr = analogRead(PIN_CURRENT);
     Serial.print(curr);
     Serial.print(" = ");
-    curr = curr  * (MAX_CURRENT - MIN_CURRENT) / 0x3fc + MIN_CURRENT;
+    curr = curr  * (MAX_CURRENT - MIN_CURRENT) / 0x3ff + MIN_CURRENT;
     Serial.println(curr);
     Serial.println();
 
@@ -310,7 +310,7 @@ void loop() {
     readIMU();
   #endif
 
-  #if (defined (STARTER_BATTERY) && defined (ARDUINO_NANO33BLE))
+  #if (defined (STARTER_BATTERY) && defined (ARDUINO_ARCH_NRF52840))
     readStarter();
   #endif
   
@@ -335,7 +335,7 @@ void loop() {
           checkBleCal();
         #endif
   
-        #if (defined (STARTER_BATTERY) && defined (ARDUINO_NANO33BLE))
+        #if (defined (STARTER_BATTERY) && defined (ARDUINO_ARCH_NRF52840))
           readStarter();
         #endif
       
@@ -437,7 +437,7 @@ void loop() {
   }
 #endif
 
-#if (defined (STARTER_BATTERY) && defined (ARDUINO_NANO33BLE))
+#if (defined (STARTER_BATTERY) && defined (ARDUINO_ARCH_NRF52840))
   void readStarter(){
     float sb = analogRead(PIN_SB) * VOLTAGE_MULT;
     saveSensorVal(SENSOR_IDX_STARTER_BATT, sb);
@@ -478,7 +478,7 @@ void loop() {
     saveSensorVal(SENSOR_IDX_RELAY, relay);
 
     int intCurr = analogRead(PIN_CURRENT);
-    float curr = intCurr  * (MAX_CURRENT - MIN_CURRENT) / 0x3fc + MIN_CURRENT; 
+    float curr = intCurr  * (MAX_CURRENT - MIN_CURRENT) / 0x3ff + MIN_CURRENT; 
     ampSeconds = ampSeconds + curr * (millis() - lastCurr) / 1000;
     lastCurr = millis();
     float avgCurr = ampSeconds * 1000 / (millis() - lastUpload);
@@ -486,6 +486,7 @@ void loop() {
     
     saveSensorVal(SENSOR_IDX_CURRENT, avgCurr);
 
+    leisureBattChar.writeValue(vanSensors[SENSOR_IDX_LEISURE_BATT].val);
     ignitionChar.writeValue(vanSensors[SENSOR_IDX_IGNITION].val);
     mainsPowerChar.writeValue(vanSensors[SENSOR_IDX_MAINS_POWER].val);
     currentChar.writeValue(vanSensors[SENSOR_IDX_CURRENT].val);

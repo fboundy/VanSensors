@@ -1,3 +1,5 @@
+#define VERSION         8.4
+
 #include <Arduino.h>
 
 #define SENS_TYPE_ADC     0
@@ -71,7 +73,6 @@ vanSensorSet vanSensors[] = {
                             };
                             
 void saveSensorVal(int i, float x){
-  float v1;
   if (x < vanSensors[i].valMin || x > vanSensors[i].valMax){
     vanSensors[i].val =  0x0000;
     vanSensors[i].updated = false;
