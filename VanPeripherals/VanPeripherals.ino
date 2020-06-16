@@ -26,9 +26,9 @@
 //#define FLUID_LEVEL    1
 #define POWER_IMU      1
 //#define STARTER_BATTERY 1
-#define DEBUG_0        1 // high level debug
+//#define DEBUG_0        1 // high level debug
 //#define DEBUG_1        1 // low level debug
-
+#define DEBUG_2        1 //just spit out data
 
 #include <ArduinoBLE.h>
 
@@ -129,24 +129,27 @@ long  previousMillis = 0;  // last time the battery level was checked, in ms
 void setup() {
   Serial.begin(9600); // // Serial Communication is starting with 9600 of baudrate speed
 
-  Serial.println("Bluetooth LE");
-  Serial.println("============");
-  Serial.println();
-
-  if (!BLE.begin()) {
-    Serial.println("starting BLE failed!");
-  } else {
-    Serial.print("BLE started with address ");
-    Serial.println(BLE.address().c_str());
-
-    Serial.print("Setting Device Name to ");
-    String strName = String("Van_" + BLE.address().substring(0,5));
-    Serial.println(strName);
-
-    BLE.setDeviceName(strName.c_str());
-    BLE.setLocalName(strName.c_str());
-  }
-  Serial.println();
+  #if defined(DEBUG_0)
+    Serial.println("Bluetooth LE");
+    Serial.println();
+  
+    if (!BLE.begin()) {
+      Serial.println("starting BLE failed!");
+    } else {
+      Serial.print("BLE started with address ");
+      Serial.println(BLE.address().c_str());
+  
+      Serial.print("Setting Device Name to ");
+      String strName = String("Van_" + BLE.address().substring(0,5));
+      Serial.println(strName);
+  
+      BLE.setDeviceName(strName.c_str());
+      BLE.setLocalName(strName.c_str());
+    }
+    Serial.println();
+  #else
+    BLE.begin();
+  #endif
   
   pinMode(LED_BUILTIN, OUTPUT); // initialize the built-in LED pin to indicate when a central is connected
 
@@ -216,10 +219,6 @@ void setup() {
   #endif
 
   #if (defined (STARTER_BATTERY) && defined (ARDUINO_ARCH_NRF52840)) 
-    Serial.println("Starter Battery Sensor");
-    Serial.println("======================");
-    Serial.println();
-
     BLE.setAdvertisedService(starterBatteryService);          // add the service UUID
     starterBatteryService.addCharacteristic(starterBatteryChar);  // add the battery level characteristic
     starterBatteryService.addCharacteristic(alternatorChar);  // add the battery level characteristic
@@ -227,19 +226,20 @@ void setup() {
     alternatorChar.addDescriptor(alternatorLabelDescriptor);
  
     BLE.addService(starterBatteryService);                    // Add the battery service
-      
-    Serial.print(" Starter Battery:  ");
-    Serial.print(analogRead(PIN_SB) * VOLTAGE_MULT);
-    Serial.println("V");      
-    Serial.print(" Alternator:       ");
-    Serial.println(0x3ff * ((analogRead(PIN_SB) * VOLTAGE_MULT) > ALT_THRESHOLD));      
+    #if defined(DEBUG_0)
+      Serial.println("Starter Battery Sensor");
+      Serial.println("======================");
+      Serial.println();
+       
+      Serial.print(" Starter Battery:  ");
+      Serial.print(analogRead(PIN_SB) * VOLTAGE_MULT);
+      Serial.println("V");      
+      Serial.print(" Alternator:       ");
+      Serial.println(0x3ff * ((analogRead(PIN_SB) * VOLTAGE_MULT) > ALT_THRESHOLD));    
+    #endif  
   #endif
 
   #if (defined (POWER_IMU) && defined (ARDUINO_AVR_UNO_WIFI_REV2))  
-    Serial.println("External/Vehicle Power Sensor");
-    Serial.println("==============================");
-    Serial.println();
-
     BLE.setAdvertisedService(powerImuService);          // add the service UUID
     powerImuService.addCharacteristic(leisureBattChar);  // add the battery level characteristic
     powerImuService.addCharacteristic(ignitionChar);  // add the battery level characteristic
@@ -260,38 +260,44 @@ void setup() {
     BLE.addService(powerImuService);                    // Add the battery service
 
     readExternal();
-      
-    Serial.print(" LB Voltage:       ");
-    Serial.println(analogRead(PIN_LB) * VOLTAGE_MULT);      
-    Serial.print(" Ignition:         ");
-    Serial.println(analogRead(PIN_IGN));      
-    Serial.print(" Mains Power:      ");
-    Serial.println(analogRead(PIN_MAINS));
-    Serial.print(" Charge Relay:     ");
-    Serial.println(analogRead(PIN_RELAY));
-    Serial.print(" Current:          ");
-    float curr = analogRead(PIN_CURRENT);
-    Serial.print(curr);
-    Serial.print(" = ");
-    curr = curr  * (MAX_CURRENT - MIN_CURRENT) / 0x3ff + MIN_CURRENT;
-    Serial.println(curr);
-    Serial.println();
-
-    Serial.println("Vehicle Tilt Sensor");
-    Serial.println("===================");
-    Serial.println();
-
+    
     boolIMU = IMU.begin();
 
-    readIMU();
-    
-    Serial.print(" Pitch:            ");
-    Serial.print(readSensorVal(SENSOR_IDX_PITCH));
-    Serial.print(" deg   ");
-    Serial.print(" Roll:             ");
-    Serial.print(readSensorVal(SENSOR_IDX_ROLL));
-    Serial.println(" deg");
-    
+    readIMU();      
+    #if defined(DEBUG_0)
+      Serial.println("External/Vehicle Power Sensor");
+      Serial.println("==============================");
+      Serial.println();
+
+      Serial.print(" LB Voltage:       ");
+      Serial.println(analogRead(PIN_LB) * VOLTAGE_MULT);      
+      Serial.print(" Ignition:         ");
+      Serial.println(analogRead(PIN_IGN));      
+      Serial.print(" Mains Power:      ");
+      Serial.println(analogRead(PIN_MAINS));
+      Serial.print(" Charge Relay:     ");
+      Serial.println(analogRead(PIN_RELAY));
+      Serial.print(" Current:          ");
+      float curr = analogRead(PIN_CURRENT);
+      curr = curr  * (MAX_CURRENT - MIN_CURRENT) / 0x3ff + MIN_CURRENT;
+      Serial.print(curr);
+      Serial.print(" = ");
+  
+      Serial.println(curr);
+      Serial.println();
+  
+      Serial.println("Vehicle Tilt Sensor");
+      Serial.println("===================");
+      Serial.println();
+  
+      
+      Serial.print(" Pitch:            ");
+      Serial.print(readSensorVal(SENSOR_IDX_PITCH));
+      Serial.print(" deg   ");
+      Serial.print(" Roll:             ");
+      Serial.print(readSensorVal(SENSOR_IDX_ROLL));
+      Serial.println(" deg");
+    #endif
   #endif
   BLE.advertise();
 }
@@ -317,12 +323,10 @@ void loop() {
   BLEDevice central = BLE.central();
 
   if (central) {
-    Serial.print("Connected to central: ");
-    // print the central's BT address:
-    Serial.println(central.address());
-    // turn on the LED to indicate the connection:
-    digitalWrite(LED_BUILTIN, HIGH);
-  
+    #if defined(DEBUG_0)
+      Serial.print("Connected to central: ");
+      Serial.println(central.address());
+    #endif  
     while (central.connected()){
       central.poll();
       
@@ -349,8 +353,10 @@ void loop() {
     }
 
     digitalWrite(LED_BUILTIN, LOW);
-    Serial.print("Disconnected from central: ");
-    Serial.println(central.address());
+    #if defined(DEBUG_0)
+      Serial.print("Disconnected from central: ");
+      Serial.println(central.address());
+    #endif
   }
 }
 
@@ -478,10 +484,11 @@ void loop() {
     saveSensorVal(SENSOR_IDX_RELAY, relay);
 
     int intCurr = analogRead(PIN_CURRENT);
+    long millisNow = millis();
     float curr = intCurr  * (MAX_CURRENT - MIN_CURRENT) / 0x3ff + MIN_CURRENT; 
-    ampSeconds = ampSeconds + curr * (millis() - lastCurr) / 1000;
-    lastCurr = millis();
-    float avgCurr = ampSeconds * 1000 / (millis() - lastUpload);
+    ampSeconds = ampSeconds + curr * (millisNow - lastCurr) / 1000;
+ 
+    float avgCurr = ampSeconds * 1000 / (millisNow - lastUpload);
 
     
     saveSensorVal(SENSOR_IDX_CURRENT, avgCurr);
@@ -492,6 +499,18 @@ void loop() {
     currentChar.writeValue(vanSensors[SENSOR_IDX_CURRENT].val);
     relayChar.writeValue(vanSensors[SENSOR_IDX_RELAY].val);
  
+    #if defined(DEBUG_2)
+      Serial.print(intCurr);
+      Serial.print("/t");
+      Serial.print(curr);
+      Serial.print("/t");
+      Serial.print(millisNow - lastCurr);
+      Serial.print("/t");
+      Serial.print(ampSeconds);
+      Serial.print("/t");
+      Serial.println(avgCurr);
+    #endif
+    
     #if defined(DEBUG_0)
       Serial.print(" LB Voltage:       ");
       Serial.print(lb);
@@ -525,6 +544,17 @@ void loop() {
       Serial.print(intCurr);
       Serial.print("   ");
       Serial.println(curr);
+      
+      Serial.print(" Delta-T:            ");
+      Serial.print((millisNow - lastCurr) / 1000);
+      Serial.println(" sec");
+
+      Serial.print(" Amp-seconds:        ");
+      Serial.print(ampSecpnds);
+      Serial.print(" in ");
+      Serial.print((millisNow - lastUpload) / 1000)
+      Serial.println(" sec");
+            
       Serial.print(" Avg Current:       ");
       Serial.print(avgCurr);
       Serial.print("   ");
@@ -533,6 +563,7 @@ void loop() {
       Serial.println(readSensorVal(SENSOR_IDX_CURRENT));
     
     #endif  
+    lastCurr = milliNow();
   }
 
   void readIMU(){

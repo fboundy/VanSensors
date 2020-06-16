@@ -443,15 +443,18 @@
                         Serial.print(vanSensors[j].uuid_c);
                         Serial.print(". Value: ");
                         peripheral.characteristic(vanSensors[j].uuid_c).readValue(vanSensors[j].val);
-                        if (j == SENSOR_IDX_LEISURE_BATT){
+                        if (j == SENSOR_IDX_LEISURE_BATT && vanSensors[j].val != 0){
                           vanSensors[j].val = vanSensors[j].val * lbvMult; 
                           oledXYprint(OLED_LB, OLED_RCOL, readSensorVal(j), 1);
                         }                      
-                        if (j == SENSOR_IDX_STARTER_BATT){
+                        if (j == SENSOR_IDX_STARTER_BATT && vanSensors[j].val != 0){
                           vanSensors[j].val = vanSensors[j].val * sbvMult; 
                           oledXYprint(OLED_SB, OLED_RCOL, readSensorVal(j), 1);
                         }                      
                         Serial.println(vanSensors[j].val);
+
+						            mqttLogPrint("Char " + String(vanSensors[j].uuid_c) + ": " + String(vanSensors[j].val));
+
                         vanSensors[j].updated=(vanSensors[j].val != 0);
                       }
                     }
@@ -514,47 +517,49 @@
   
   // Auto-Cal logic
     #if defined (BMS_CUTOFF)
-      bool  currentRelay = (readSensorVal(SENSOR_IDX_RELAY) > 0x01ff);
-      if (!currentRelay && lastRelay  && (chargeRelayCount > 1)){
-        minDiv();
-        mqttLogPrint("Charge Relay Cutoff detected");
-
-        Serial.println("\nCharge Relay cutoff detected:");
-        Serial.println(  "-----------------------------");
-        Serial.print("  BMS Cutoff Voltage   : ");
-        Serial.print(BMS_CUTOFF);
-        Serial.println("V");
-        Serial.print("  Last Measured Voltage: ");
-        Serial.print(readSensorVal(SENSOR_IDX_LEISURE_BATT));
-        Serial.println("V");
-        if (readSensorVal(SENSOR_IDX_LEISURE_BATT) > -999){
-          float calcLbvM = lbvMult * BMS_CUTOFF / readSensorVal(SENSOR_IDX_LEISURE_BATT);
-          if ((calcLbvM > LBVM_MIN) && (calcLbvM  < LBVM_MAX)){
-            lbvMult = calcLbvM;
-            Serial.print("  New Voltage Mult     : ");
-            Serial.println(lbvMult);
-            char buf[10];
-            dtostrf(lbvMult,10,8,buf);
-            for (int i = 0; i < 10; i++){
-              EEPROM.write(addrLbCal + i, buf[i]);
-            }
-            EEPROM.write(addrLbCal + 10,0);
-            Serial.print("  Committing changes to Flash Memory:");
-            EEPROM.commit();
-            if (EEPROM.isValid()){
-              Serial.println("OK");            
-            } else {
-              Serial.println("Fail");            
-            }
-            mqttLogPrint("New LB Vmult:" + String(buf));
-            mqttLogPrint("LB SOC reset to 100%");
-          }
-        }      
-        ampHours = BATTERY_CAPACITY;  
-      }  
-      chargeRelayCount += (readSensorVal(SENSOR_IDX_RELAY) > -999);
-      lastRelay = currentRelay;
+      if (readSensorVal(SENSOR_IDX_RELAY) > -999){
+        bool  currentRelay = (readSensorVal(SENSOR_IDX_RELAY) > 0x01ff);
+        if (!currentRelay && lastRelay  && (chargeRelayCount > 1)){
+          minDiv();
+          mqttLogPrint("Charge Relay Cutoff detected");
   
+          Serial.println("\nCharge Relay cutoff detected:");
+          Serial.println(  "-----------------------------");
+          Serial.print("  BMS Cutoff Voltage   : ");
+          Serial.print(BMS_CUTOFF);
+          Serial.println("V");
+          Serial.print("  Last Measured Voltage: ");
+          Serial.print(readSensorVal(SENSOR_IDX_LEISURE_BATT));
+          Serial.println("V");
+          if (readSensorVal(SENSOR_IDX_LEISURE_BATT) > -999){
+            float calcLbvM = lbvMult * BMS_CUTOFF / readSensorVal(SENSOR_IDX_LEISURE_BATT);
+            if ((calcLbvM > LBVM_MIN) && (calcLbvM  < LBVM_MAX)){
+              lbvMult = calcLbvM;
+              Serial.print("  New Voltage Mult     : ");
+              Serial.println(lbvMult);
+              char buf[10];
+              dtostrf(lbvMult,10,8,buf);
+              for (int i = 0; i < 10; i++){
+                EEPROM.write(addrLbCal + i, buf[i]);
+              }
+              EEPROM.write(addrLbCal + 10,0);
+              Serial.print("  Committing changes to Flash Memory:");
+              EEPROM.commit();
+              if (EEPROM.isValid()){
+                Serial.println("OK");            
+              } else {
+                Serial.println("Fail");            
+              }
+              mqttLogPrint("New LB Vmult:" + String(buf));
+              mqttLogPrint("LB SOC reset to 100%");
+            }
+          }      
+          ampHours = BATTERY_CAPACITY;  
+        }  
+        chargeRelayCount += (readSensorVal(SENSOR_IDX_RELAY) > -999);
+        lastRelay = currentRelay;
+      }
+      
       if (readSensorVal(SENSOR_IDX_CURRENT) > -999){
         minDiv();
         Serial.println("\nBattery Capacity Calcs:");
@@ -574,6 +579,12 @@
         Serial.print("  New Capacity     :");
         Serial.print(ampHours);
         Serial.println(" Ah");
+        if (ampHours > BATTERY_CAPACITY){
+          ampHours = BATTERY_CAPACITY;
+          Serial.print("  Corr Capacity    :");
+          Serial.print(ampHours);
+          Serial.println(" Ah");
+        }
         saveSensorVal(SENSOR_IDX_LB_SOC, ampHours / BATTERY_CAPACITY * 100);
         lastAmpHourCalc = millisNow;
       }
